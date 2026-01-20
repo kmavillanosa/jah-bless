@@ -11,6 +11,7 @@ const initialState: TemplatesState = {
 		{
 			id: 'regular',
 			name: 'Regular Job Application',
+			description: 'Perfect for standard job applications. Professional and straightforward format.',
 			content: `Dear Hiring Manager,
 
 I am writing to express my strong interest in the {{position}} position at {{companyName}}. With my background and experience{{techStack}}, I am confident that I would be a valuable addition to your team.
@@ -37,6 +38,7 @@ Sincerely,
 		{
 			id: 'regular-with-resume',
 			name: 'Regular Job Application (with Resume)',
+			description: 'Use when submitting your resume along with the cover letter. Mentions the attached resume.',
 			content: `Dear Hiring Manager,
 
 I am writing to express my strong interest in the {{position}} position at {{companyName}}. With my background and experience{{techStack}}, I am confident that I would be a valuable addition to your team.
@@ -63,6 +65,7 @@ Sincerely,
 		{
 			id: 'upwork',
 			name: 'Upwork Proposal',
+			description: 'Tailored for Upwork freelancing platform. Casual yet professional tone.',
 			content: `Hi there,
 
 I came across your job posting for {{position}} and I'm excited to submit my proposal. I believe my skills and experience{{techStack}} make me an ideal candidate for this project.
@@ -88,6 +91,7 @@ Best regards,
 		{
 			id: 'follow-up',
 			name: 'Follow-up After Application',
+			description: 'Send this 1-2 weeks after submitting your application to show continued interest.',
 			content: `Dear Hiring Manager,
 
 I wanted to follow up on my application for the {{position}} position at {{companyName}}, which I submitted on {{date}}.
@@ -115,6 +119,7 @@ Best regards,
 		{
 			id: 'thank-you-interview',
 			name: 'Thank You After Interview',
+			description: 'Send within 24 hours after an interview to express gratitude and reinforce your interest.',
 			content: `Dear Hiring Manager,
 
 Thank you for taking the time to speak with me today about the {{position}} position at {{companyName}}. I truly enjoyed our conversation and learning more about the role and your team.
@@ -143,6 +148,7 @@ Best regards,
 		{
 			id: 'referral',
 			name: 'Referral-Based Application',
+			description: 'Use when someone has referred you to the position. Mentions the referrer.',
 			content: `Dear Hiring Manager,
 
 I am writing to express my interest in the {{position}} position at {{companyName}}. {{referrerName}} recommended that I reach out to you, as they thought my background and experience{{techStack}} would be a great fit for this role.
@@ -170,6 +176,7 @@ Best regards,
 		{
 			id: 'cold-outreach',
 			name: 'Cold Outreach',
+			description: 'For reaching out to companies without an open position. Shows initiative and interest.',
 			content: `Dear Hiring Manager,
 
 I hope this message finds you well. I am reaching out to express my interest in potential opportunities at {{companyName}}. I have been following your company's work and am impressed by {{companyAchievement}}.
@@ -196,6 +203,7 @@ Best regards,
 		{
 			id: 'career-change',
 			name: 'Career Change Application',
+			description: 'Emphasizes transferable skills when transitioning to a new field or industry.',
 			content: `Dear Hiring Manager,
 
 I am writing to express my strong interest in the {{position}} position at {{companyName}}. While my background may differ from traditional candidates, I bring a unique perspective and transferable skills{{techStack}} that I believe would be valuable to your team.
@@ -222,6 +230,7 @@ Sincerely,
 		{
 			id: 'internship',
 			name: 'Internship Application',
+			description: 'Designed for students and recent graduates seeking internship opportunities.',
 			content: `Dear Hiring Manager,
 
 I am writing to express my interest in the {{position}} internship opportunity at {{companyName}}. As a {{studentStatus}} with a passion for{{techStack}}, I am eager to gain hands-on experience and contribute to your team.
@@ -249,6 +258,7 @@ Best regards,
 		{
 			id: 'freelance-contract',
 			name: 'Freelance/Contract Work',
+			description: 'Perfect for freelance or contract positions. Highlights flexibility and project-based experience.',
 			content: `Dear Hiring Manager,
 
 I am writing to express my interest in the {{position}} opportunity at {{companyName}}. With my expertise in{{techStack}}, I am confident that I can deliver high-quality results for your project.
@@ -277,6 +287,7 @@ Best regards,
 		{
 			id: 're-application',
 			name: 'Re-application',
+			description: 'Use when reapplying for a position. Shows growth and continued interest.',
 			content: `Dear Hiring Manager,
 
 I am writing to reapply for the {{position}} position at {{companyName}}. Since my last application, I have continued to develop my skills{{techStack}} and gain relevant experience that I believe makes me an even stronger candidate for this role.
@@ -303,6 +314,7 @@ Best regards,
 		{
 			id: 'networking',
 			name: 'Networking/Informational Interview Request',
+			description: 'For requesting informational interviews or networking conversations. Professional and respectful tone.',
 			content: `Dear {{recipientName}},
 
 I hope this message finds you well. I am reaching out because I am interested in learning more about career opportunities in {{fieldIndustry}} and would value your insights and advice.

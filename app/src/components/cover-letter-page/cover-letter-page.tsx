@@ -9,6 +9,7 @@ import { getQueryParams, updateUrlParams } from '../../utils/query-params'
 import { saveDefaults, clearDefaults } from '../../utils/local-storage'
 import { FieldType } from '../../types'
 import { SignaturePad } from '../signature-pad/signature-pad'
+import Joyride, { type Step, type CallBackProps, STATUS } from 'react-joyride'
 import './cover-letter-page.css'
 
 export function CoverLetterPage() {
@@ -44,12 +45,25 @@ export function CoverLetterPage() {
 	const [showSuggestions, setShowSuggestions] = useState<Record<string, boolean>>({})
 	const [highlightedIndex, setHighlightedIndex] = useState<Record<string, number>>({})
 	const [showSettings, setShowSettings] = useState(false)
+	const [runTour, setRunTour] = useState(false)
+	const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
+		applicationDetails: true,
+		templateSpecific: true,
+		personalInfo: true,
+	})
 	const [settingsValues, setSettingsValues] = useState({
 		fullName: details.fullName,
 		email: details.email,
 		phone: details.phone,
 		techStack: details.techStack || '',
 	})
+
+	const toggleGroup = (groupName: string) => {
+		setExpandedGroups((prev) => ({
+			...prev,
+			[groupName]: !prev[groupName],
+		}))
+	}
 	const [signature, setSignature] = useState<string | null>(() => {
 		const saved = localStorage.getItem('lettercraft_signature')
 		return saved || null
@@ -262,6 +276,7 @@ export function CoverLetterPage() {
 		}
 	}, [isFormValid, showExportDropdown])
 
+
 	const handleTemplateChange = (templateId: string) => {
 		dispatch(setActiveTemplate(templateId))
 	}
@@ -392,6 +407,35 @@ export function CoverLetterPage() {
 		return totalFields > 0 ? Math.round((filledFields / totalFields) * 100) : 0
 	}, [groupedVariables, formValues])
 
+	// Auto-expand groups with missing required fields
+	useEffect(() => {
+		if (missingRequiredFields.length > 0) {
+			setExpandedGroups((prev) => {
+				const updatedGroups: Record<string, boolean> = { ...prev }
+				
+				// Check application details
+				const appDetailsMissing = groupedVariables.applicationDetails
+					.filter(v => v.required && missingRequiredFields.includes(v.label))
+					.length > 0
+				if (appDetailsMissing) updatedGroups.applicationDetails = true
+				
+				// Check template-specific
+				const templateSpecificMissing = groupedVariables.templateSpecific
+					.filter(v => v.required && missingRequiredFields.includes(v.label))
+					.length > 0
+				if (templateSpecificMissing) updatedGroups.templateSpecific = true
+				
+				// Check personal info
+				const personalInfoMissing = groupedVariables.personalInfo
+					.filter(v => v.required && missingRequiredFields.includes(v.label))
+					.length > 0
+				if (personalInfoMissing) updatedGroups.personalInfo = true
+				
+				return updatedGroups
+			})
+		}
+	}, [missingRequiredFields, groupedVariables])
+
 	// Validate individual field
 	const validateField = (variable: typeof templateVariables[0], value: string): string | null => {
 		if (variable.fieldType === FieldType.MULTISELECT) {
@@ -442,6 +486,52 @@ export function CoverLetterPage() {
 		} catch (err) {
 			console.error('Failed to copy to clipboard:', err)
 		}
+	}
+
+	// Tour steps configuration
+	const tourSteps: Step[] = [
+		{
+			target: '.template-selector-section',
+			content: 'Start by selecting a cover letter template that matches your situation. Each template has a description to help you choose the right one.',
+			placement: 'bottom',
+			disableBeacon: true,
+		},
+		{
+			target: '.form-section',
+			content: 'Fill in the required fields in the form. Fields marked with * are required. You can collapse sections you don\'t need by clicking the header.',
+			placement: 'right',
+		},
+		{
+			target: '.preview-section',
+			content: 'Watch your cover letter update in real-time as you fill in the form. The preview shows exactly how your final letter will look.',
+			placement: 'left',
+		},
+		{
+			target: '.btn-copy',
+			content: 'Copy your completed cover letter to clipboard with one click. Make sure all required fields are filled first.',
+			placement: 'top',
+		},
+		{
+			target: '.export-dropdown',
+			content: 'Export your cover letter as PDF, Text, or Markdown PDF. PDF is the default option and includes professional formatting.',
+			placement: 'top',
+		},
+		{
+			target: '.btn-settings',
+			content: 'Save your personal information in Settings to auto-fill forms in the future. All data is stored locally on your device only.',
+			placement: 'bottom',
+		},
+	]
+
+	const handleJoyrideCallback = (data: CallBackProps) => {
+		const { status } = data
+		if (status === STATUS.FINISHED || status === STATUS.SKIPPED) {
+			setRunTour(false)
+		}
+	}
+
+	const handleStartTour = () => {
+		setRunTour(true)
 	}
 
 	const renderInput = (variable: typeof templateVariables[0]) => {
@@ -853,6 +943,15 @@ export function CoverLetterPage() {
 				</div>
 				<div className="header-actions">
 					<button
+						onClick={handleStartTour}
+						className="btn btn-info"
+						aria-label="Take a tour"
+						title="Take a guided tour"
+					>
+						<span>ℹ️</span>
+						<span>Information</span>
+					</button>
+					<button
 						onClick={() => setShowSettings(!showSettings)}
 						className="btn btn-settings"
 						aria-label="Settings"
@@ -869,6 +968,12 @@ export function CoverLetterPage() {
 					<p className="settings-description">
 						Configure your default name, email, phone, tech stack, and e-signature. These will be used to pre-fill forms and add to your cover letters.
 					</p>
+					<div className="settings-disclaimer">
+						<span className="settings-disclaimer-icon">🔒</span>
+						<p className="settings-disclaimer-text">
+							<strong>Privacy Notice:</strong> All information is stored locally on your device only. We do not collect, store, or transmit any of your personal data to our servers.
+						</p>
+					</div>
 					<div className="settings-form">
 						<div className="form-group">
 							<label htmlFor="settings-fullName" className="form-label">
@@ -974,9 +1079,12 @@ export function CoverLetterPage() {
 			)}
 
 			<div className="template-selector-section">
-				<label htmlFor="template-select" className="template-selector-label">
-					Select Template:
-				</label>
+				<div className="template-selector-header">
+					<span className="template-selector-icon">📝</span>
+					<label htmlFor="template-select" className="template-selector-label">
+						Select Template
+					</label>
+				</div>
 				<select
 					id="template-select"
 					value={activeTemplateId || ''}
@@ -989,13 +1097,18 @@ export function CoverLetterPage() {
 						</option>
 					))}
 				</select>
+				{activeTemplate?.description && (
+					<p className="template-selector-description">
+						{activeTemplate.description}
+					</p>
+				)}
 			</div>
 
 			{missingRequiredFields.length > 0 && (
-				<div className="missing-fields-alert">
+				<div className="missing-fields-alert" role="alert">
 					<span className="alert-icon">⚠️</span>
 					<div className="alert-content">
-						<strong>Missing required fields:</strong>
+						<strong>Complete these fields to export:</strong>
 						<span>{missingRequiredFields.join(', ')}</span>
 					</div>
 				</div>
@@ -1029,34 +1142,62 @@ export function CoverLetterPage() {
 							v.id !== 'techStack' || !details.techStack?.trim() || groupedVariables.visible.includes(v)
 						).length > 0 && (
 							<div className="form-field-group">
-								<h3 className="field-group-title">Application Details</h3>
-								{groupedVariables.applicationDetails
-									.filter(v => groupedVariables.visible.includes(v))
-									.map((variable) => (
-										<div key={variable.id} className="form-group">
-											<label htmlFor={variable.id} className="form-label">
-												{variable.label}
-												{variable.required && <span className="required">*</span>}
-											</label>
-											{renderInput(variable)}
-										</div>
-									))}
+								<button
+									type="button"
+									onClick={() => toggleGroup('applicationDetails')}
+									className="field-group-header"
+									aria-expanded={expandedGroups.applicationDetails}
+								>
+									<h3 className="field-group-title">Application Details</h3>
+									<span className="field-group-toggle">
+										{expandedGroups.applicationDetails ? '−' : '+'}
+									</span>
+								</button>
+								{expandedGroups.applicationDetails && (
+									<div className="field-group-content">
+										{groupedVariables.applicationDetails
+											.filter(v => groupedVariables.visible.includes(v))
+											.map((variable) => (
+												<div key={variable.id} className="form-group">
+													<label htmlFor={variable.id} className="form-label">
+														{variable.label}
+														{variable.required && <span className="required">*</span>}
+													</label>
+													{renderInput(variable)}
+												</div>
+											))}
+									</div>
+								)}
 							</div>
 						)}
 						
 						{/* Template-Specific Fields Section */}
 						{groupedVariables.templateSpecific.length > 0 && (
 							<div className="form-field-group">
-								<h3 className="field-group-title">Additional Information</h3>
-								{groupedVariables.templateSpecific.map((variable) => (
-									<div key={variable.id} className="form-group">
-										<label htmlFor={variable.id} className="form-label">
-											{variable.label}
-											{variable.required && <span className="required">*</span>}
-										</label>
-										{renderInput(variable)}
+								<button
+									type="button"
+									onClick={() => toggleGroup('templateSpecific')}
+									className="field-group-header"
+									aria-expanded={expandedGroups.templateSpecific}
+								>
+									<h3 className="field-group-title">Additional Information</h3>
+									<span className="field-group-toggle">
+										{expandedGroups.templateSpecific ? '−' : '+'}
+									</span>
+								</button>
+								{expandedGroups.templateSpecific && (
+									<div className="field-group-content">
+										{groupedVariables.templateSpecific.map((variable) => (
+											<div key={variable.id} className="form-group">
+												<label htmlFor={variable.id} className="form-label">
+													{variable.label}
+													{variable.required && <span className="required">*</span>}
+												</label>
+												{renderInput(variable)}
+											</div>
+										))}
 									</div>
-								))}
+								)}
 							</div>
 						)}
 						
@@ -1065,21 +1206,35 @@ export function CoverLetterPage() {
 							!details[v.id as keyof typeof details]?.trim()
 						).length > 0 && (
 							<div className="form-field-group">
-								<h3 className="field-group-title">Personal Information</h3>
-								<p className="field-group-hint">
-									Configure these in Settings to auto-fill for future applications.
-								</p>
-								{groupedVariables.personalInfo
-									.filter(v => !details[v.id as keyof typeof details]?.trim())
-									.map((variable) => (
-										<div key={variable.id} className="form-group">
-											<label htmlFor={variable.id} className="form-label">
-												{variable.label}
-												{variable.required && <span className="required">*</span>}
-											</label>
-											{renderInput(variable)}
-										</div>
-									))}
+								<button
+									type="button"
+									onClick={() => toggleGroup('personalInfo')}
+									className="field-group-header"
+									aria-expanded={expandedGroups.personalInfo}
+								>
+									<h3 className="field-group-title">Personal Information</h3>
+									<span className="field-group-toggle">
+										{expandedGroups.personalInfo ? '−' : '+'}
+									</span>
+								</button>
+								{expandedGroups.personalInfo && (
+									<div className="field-group-content">
+										<p className="field-group-hint">
+											Configure these in Settings to auto-fill for future applications.
+										</p>
+										{groupedVariables.personalInfo
+											.filter(v => !details[v.id as keyof typeof details]?.trim())
+											.map((variable) => (
+												<div key={variable.id} className="form-group">
+													<label htmlFor={variable.id} className="form-label">
+														{variable.label}
+														{variable.required && <span className="required">*</span>}
+													</label>
+													{renderInput(variable)}
+												</div>
+											))}
+									</div>
+								)}
 							</div>
 						)}
 					</form>
@@ -1189,6 +1344,54 @@ export function CoverLetterPage() {
 					</a>
 				</p>
 			</footer>
+
+			<Joyride
+				steps={tourSteps}
+				run={runTour}
+				callback={handleJoyrideCallback}
+				continuous={true}
+				showProgress={true}
+				showSkipButton={true}
+				styles={{
+					options: {
+						primaryColor: '#8b7355',
+						textColor: '#4a4538',
+						backgroundColor: '#fffef9',
+						overlayColor: 'rgba(0, 0, 0, 0.5)',
+						arrowColor: '#fffef9',
+						zIndex: 10000,
+					},
+					tooltip: {
+						borderRadius: '10px',
+						padding: '1rem',
+					},
+					tooltipContainer: {
+						textAlign: 'left',
+					},
+					buttonNext: {
+						backgroundColor: '#8b7355',
+						color: '#fffef9',
+						borderRadius: '8px',
+						padding: '0.625rem 1.25rem',
+						fontSize: '0.875rem',
+						fontWeight: '600',
+					},
+					buttonBack: {
+						color: '#8b7355',
+						marginRight: '0.5rem',
+					},
+					buttonSkip: {
+						color: '#9d9588',
+					},
+				}}
+				locale={{
+					back: 'Back',
+					close: 'Close',
+					last: 'Finish',
+					next: 'Next',
+					skip: 'Skip',
+				}}
+			/>
 		</div>
 	)
 }

@@ -35,6 +35,7 @@ export interface Template {
 	name: string
 	content: string
 	variables: string[] // Array of variable IDs used in this template
+	description?: string // Optional description for the template
 	createdAt: string
 	updatedAt: string
 }
