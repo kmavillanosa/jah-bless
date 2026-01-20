@@ -145,7 +145,13 @@ export function CoverLetterPage() {
 	const handleExportPDF = () => {
 		const companyName = formValues.companyName || formValues.position || 'application'
 		const filename = `cover-letter-${companyName}-${Date.now()}.pdf`
-		generatePDF(processedContent, filename)
+		generatePDF(processedContent, filename, {
+			fullName: formValues.fullName || details.fullName,
+			email: formValues.email || details.email,
+			phone: formValues.phone || details.phone,
+			companyName: formValues.companyName,
+			position: formValues.position,
+		})
 	}
 
 	const handleExportText = () => {
