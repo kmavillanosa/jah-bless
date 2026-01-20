@@ -2,6 +2,10 @@
 	min-height: 100vh;
 	padding: 2rem 1.5rem;
 	background: #faf8f3;
+	background-image: 
+		linear-gradient(rgba(139, 115, 85, 0.08) 1px, transparent 1px),
+		linear-gradient(90deg, rgba(139, 115, 85, 0.08) 1px, transparent 1px);
+	background-size: 20px 20px;
 	max-width: 1400px;
 	margin: 0 auto;
 }
