@@ -46,6 +46,7 @@ export interface BasicDetails {
 	fullName: string
 	email: string
 	phone: string
+	techStack: string
 	address: string
 	city: string
 	state: string

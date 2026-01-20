@@ -14,6 +14,7 @@ const initialState: TemplateVariablesState = {
 			label: 'Full Name',
 			fieldType: FieldType.TEXT,
 			required: true,
+			placeholder: '[Your Full Name]',
 		},
 		{
 			id: 'email',
@@ -21,12 +22,14 @@ const initialState: TemplateVariablesState = {
 			label: 'Email',
 			fieldType: FieldType.EMAIL,
 			required: true,
+			placeholder: '[your.email@example.com]',
 		},
 		{
 			id: 'phone',
 			name: 'phone',
 			label: 'Phone',
 			fieldType: FieldType.PHONE,
+			placeholder: '[Your Phone Number]',
 		},
 		{
 			id: 'companyName',
@@ -34,6 +37,7 @@ const initialState: TemplateVariablesState = {
 			label: 'Company Name',
 			fieldType: FieldType.TEXT,
 			required: true,
+			placeholder: '[Company Name]',
 		},
 		{
 			id: 'techStack',
@@ -41,6 +45,7 @@ const initialState: TemplateVariablesState = {
 			label: 'Relevant Tech Stack',
 			fieldType: FieldType.MULTISELECT,
 			options: TECH_STACK_OPTIONS,
+			placeholder: '[Relevant Technologies]',
 		},
 		{
 			id: 'position',
@@ -48,12 +53,49 @@ const initialState: TemplateVariablesState = {
 			label: 'Position Applied For',
 			fieldType: FieldType.TEXT,
 			required: true,
+			placeholder: '[Job Position]',
 		},
 		{
 			id: 'date',
 			name: 'date',
 			label: 'Date',
 			fieldType: FieldType.DATE,
+			placeholder: '[Date]',
+		},
+		{
+			id: 'referrerName',
+			name: 'referrerName',
+			label: 'Referrer Name',
+			fieldType: FieldType.TEXT,
+			placeholder: '[Name]',
+		},
+		{
+			id: 'companyAchievement',
+			name: 'companyAchievement',
+			label: 'Company Achievement/Aspect',
+			fieldType: FieldType.TEXT,
+			placeholder: '[specific achievement or aspect of the company]',
+		},
+		{
+			id: 'studentStatus',
+			name: 'studentStatus',
+			label: 'Student Status',
+			fieldType: FieldType.TEXT,
+			placeholder: '[student/recent graduate]',
+		},
+		{
+			id: 'recipientName',
+			name: 'recipientName',
+			label: 'Recipient Name',
+			fieldType: FieldType.TEXT,
+			placeholder: '[Name/Hiring Manager]',
+		},
+		{
+			id: 'fieldIndustry',
+			name: 'fieldIndustry',
+			label: 'Field/Industry',
+			fieldType: FieldType.TEXT,
+			placeholder: '[field/industry]',
 		},
 	],
 }

@@ -14,6 +14,7 @@ const initialState: BasicDetailsState = {
 		fullName: savedDefaults.fullName,
 		email: savedDefaults.email,
 		phone: savedDefaults.phone,
+		techStack: savedDefaults.techStack || '',
 		address: '',
 		city: '',
 		state: '',

@@ -2,6 +2,7 @@ import { type TemplateVariable } from '../types'
 
 /**
  * Processes a template string by replacing variables with their values
+ * Shows placeholders when values are empty
  */
 export function processTemplate(
 	template: string,
@@ -22,7 +23,9 @@ export function processTemplate(
 			// Remove the placeholder if techStack is empty
 			processed = processed.replace(regex, '')
 		} else {
-			processed = processed.replace(regex, value)
+			// Show placeholder if value is empty, otherwise show the value
+			const displayValue = value.trim() || variable.placeholder || `[${variable.label}]`
+			processed = processed.replace(regex, displayValue)
 		}
 	})
 

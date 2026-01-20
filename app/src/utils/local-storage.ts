@@ -8,6 +8,7 @@ export interface DefaultsConfig {
 	fullName: string
 	email: string
 	phone: string
+	techStack: string
 }
 
 /**
@@ -27,6 +28,7 @@ export function loadDefaults(): DefaultsConfig {
 		fullName: '',
 		email: '',
 		phone: '',
+		techStack: '',
 	}
 }
 
@@ -38,5 +40,16 @@ export function saveDefaults(defaults: DefaultsConfig): void {
 		localStorage.setItem(STORAGE_KEY, JSON.stringify(defaults))
 	} catch (err) {
 		console.error('Failed to save defaults to localStorage:', err)
+	}
+}
+
+/**
+ * Clear defaults from localStorage
+ */
+export function clearDefaults(): void {
+	try {
+		localStorage.removeItem(STORAGE_KEY)
+	} catch (err) {
+		console.error('Failed to clear defaults from localStorage:', err)
 	}
 }

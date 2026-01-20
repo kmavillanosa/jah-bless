@@ -3,10 +3,10 @@ import { useAppSelector, useAppDispatch } from '../../store/hooks'
 import { setActiveTemplate } from '../../store/slices/templates-slice'
 import { updateDetails } from '../../store/slices/basic-details-slice'
 import { processTemplate } from '../../utils/template-processor'
-import { generatePDF } from '../../utils/pdf-generator'
+import { generatePDF, generateMarkdownPDF } from '../../utils/pdf-generator'
 import { downloadText } from '../../utils/text-download'
 import { getQueryParams, updateUrlParams } from '../../utils/query-params'
-import { saveDefaults } from '../../utils/local-storage'
+import { saveDefaults, clearDefaults } from '../../utils/local-storage'
 import { FieldType } from '../../types'
 import { SignaturePad } from '../signature-pad/signature-pad'
 import './cover-letter-page.css'
@@ -30,7 +30,12 @@ export function CoverLetterPage() {
 	const [formValues, setFormValues] = useState<Record<string, string>>(() => {
 		const initial: Record<string, string> = {}
 		templateVariables.forEach((variable) => {
-			initial[variable.id] = details[variable.id as keyof typeof details] || variable.defaultValue || ''
+			// For techStack, use saved value from details if available
+			if (variable.id === 'techStack' && details.techStack) {
+				initial[variable.id] = details.techStack
+			} else {
+				initial[variable.id] = details[variable.id as keyof typeof details] || variable.defaultValue || ''
+			}
 		})
 		return initial
 	})
@@ -43,11 +48,14 @@ export function CoverLetterPage() {
 		fullName: details.fullName,
 		email: details.email,
 		phone: details.phone,
+		techStack: details.techStack || '',
 	})
 	const [signature, setSignature] = useState<string | null>(() => {
 		const saved = localStorage.getItem('lettercraft_signature')
 		return saved || null
 	})
+	const [showExportDropdown, setShowExportDropdown] = useState(false)
+	const exportDropdownRef = useRef<HTMLDivElement>(null)
 	const isInitialMount = useRef(true)
 	const updateUrlTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
@@ -81,13 +89,25 @@ export function CoverLetterPage() {
 	}, [templates, variables, activeTemplateId, details, dispatch])
 
 	// Reset form values when template changes (but not on initial mount)
+	// Preserve existing values for fields that exist in both templates
 	useEffect(() => {
 		if (!isInitialMount.current) {
-			const initial: Record<string, string> = {}
+			const updated: Record<string, string> = {}
 			templateVariables.forEach((variable) => {
-				initial[variable.id] = details[variable.id as keyof typeof details] || variable.defaultValue || ''
+				// Preserve existing form value if it exists, otherwise use details or default
+				const existingValue = formValues[variable.id]
+				if (existingValue && existingValue.trim()) {
+					updated[variable.id] = existingValue
+				} else {
+					// For techStack, prefer saved details value
+					if (variable.id === 'techStack' && details.techStack) {
+						updated[variable.id] = details.techStack
+					} else {
+						updated[variable.id] = details[variable.id as keyof typeof details] || variable.defaultValue || ''
+					}
+				}
 			})
-			setFormValues(initial)
+			setFormValues(updated)
 			// Reset search terms and suggestions when template changes
 			setSearchTerms({})
 			setShowSuggestions({})
@@ -101,8 +121,9 @@ export function CoverLetterPage() {
 			fullName: details.fullName,
 			email: details.email,
 			phone: details.phone,
+			techStack: details.techStack || '',
 		})
-	}, [details.fullName, details.email, details.phone])
+	}, [details.fullName, details.email, details.phone, details.techStack])
 
 	// Update URL with form values (debounced)
 	useEffect(() => {
@@ -133,6 +154,25 @@ export function CoverLetterPage() {
 		return processTemplate(activeTemplate.content, templateVariables, formValues)
 	}, [activeTemplate.content, templateVariables, formValues])
 
+	// Check which required fields are missing (check all variables, including those with defaults)
+	const missingRequiredFields = useMemo(() => {
+		const missing: string[] = []
+		templateVariables.forEach((variable) => {
+			if (variable.required) {
+				// Get value from form or from details (for fields with defaults)
+				const formValue = formValues[variable.id] || ''
+				const detailValue = details[variable.id as keyof typeof details] || ''
+				const value = formValue.trim() || (typeof detailValue === 'string' ? detailValue.trim() : '')
+				if (!value) {
+					missing.push(variable.label)
+				}
+			}
+		})
+		return missing
+	}, [templateVariables, formValues, details])
+
+	const isFormValid = missingRequiredFields.length === 0
+
 	const handleInputChange = (variableId: string, value: string) => {
 		setFormValues((prev) => ({
 			...prev,
@@ -148,6 +188,7 @@ export function CoverLetterPage() {
 	}
 
 	const handleExportPDF = () => {
+		if (!isFormValid) return
 		const companyName = formValues.companyName || formValues.position || 'application'
 		const filename = `cover-letter-${companyName}-${Date.now()}.pdf`
 		generatePDF(processedContent, filename, {
@@ -158,6 +199,7 @@ export function CoverLetterPage() {
 			position: formValues.position,
 			signature: signature,
 		})
+		setShowExportDropdown(false)
 	}
 
 	const handleSignatureChange = (signatureData: string | null) => {
@@ -170,10 +212,55 @@ export function CoverLetterPage() {
 	}
 
 	const handleExportText = () => {
+		if (!isFormValid) return
 		const companyName = formValues.companyName || formValues.position || 'application'
 		const filename = `cover-letter-${companyName}-${Date.now()}.txt`
 		downloadText(processedContent, filename)
+		setShowExportDropdown(false)
 	}
+
+	const handleExportMarkdownPDF = () => {
+		if (!isFormValid) return
+		const companyName = formValues.companyName || formValues.position || 'application'
+		const filename = `cover-letter-${companyName}-${Date.now()}.md.pdf`
+		generateMarkdownPDF(processedContent, filename, {
+			fullName: formValues.fullName || details.fullName,
+			email: formValues.email || details.email,
+			phone: formValues.phone || details.phone,
+			companyName: formValues.companyName,
+			position: formValues.position,
+			signature: signature,
+		})
+		setShowExportDropdown(false)
+	}
+
+	// Close dropdown when clicking outside
+	useEffect(() => {
+		const handleClickOutside = (event: MouseEvent) => {
+			if (exportDropdownRef.current && !exportDropdownRef.current.contains(event.target as Node)) {
+				setShowExportDropdown(false)
+			}
+		}
+
+		if (showExportDropdown) {
+			// Use a longer delay to ensure dropdown menu is rendered and click handlers are set up
+			const timeoutId = setTimeout(() => {
+				document.addEventListener('mousedown', handleClickOutside)
+			}, 200)
+
+			return () => {
+				clearTimeout(timeoutId)
+				document.removeEventListener('mousedown', handleClickOutside)
+			}
+		}
+	}, [showExportDropdown])
+
+	// Close dropdown when form becomes invalid
+	useEffect(() => {
+		if (!isFormValid && showExportDropdown) {
+			setShowExportDropdown(false)
+		}
+	}, [isFormValid, showExportDropdown])
 
 	const handleTemplateChange = (templateId: string) => {
 		dispatch(setActiveTemplate(templateId))
@@ -185,6 +272,7 @@ export function CoverLetterPage() {
 			fullName: settingsValues.fullName,
 			email: settingsValues.email,
 			phone: settingsValues.phone,
+			techStack: settingsValues.techStack,
 		})
 		
 		// Update Redux store
@@ -192,6 +280,7 @@ export function CoverLetterPage() {
 			fullName: settingsValues.fullName,
 			email: settingsValues.email,
 			phone: settingsValues.phone,
+			techStack: settingsValues.techStack,
 		}))
 		
 		// Update form values if they're empty
@@ -200,6 +289,7 @@ export function CoverLetterPage() {
 			fullName: prev.fullName || settingsValues.fullName,
 			email: prev.email || settingsValues.email,
 			phone: prev.phone || settingsValues.phone,
+			techStack: prev.techStack || settingsValues.techStack,
 		}))
 		
 		setShowSettings(false)
@@ -211,25 +301,137 @@ export function CoverLetterPage() {
 			fullName: details.fullName,
 			email: details.email,
 			phone: details.phone,
+			techStack: details.techStack || '',
 		})
 		setShowSettings(false)
 	}
 
-	// Check which required fields are missing
-	const missingRequiredFields = useMemo(() => {
-		const missing: string[] = []
-		templateVariables.forEach((variable) => {
-			if (variable.required) {
-				const value = formValues[variable.id] || ''
-				if (!value.trim()) {
-					missing.push(variable.label)
+	const handleResetSettings = () => {
+		// Confirm reset action
+		if (window.confirm('Are you sure you want to reset all saved data? This will clear your name, email, phone, and tech stack defaults.')) {
+			// Clear localStorage
+			clearDefaults()
+			
+			// Reset Redux store
+			dispatch(updateDetails({
+				fullName: '',
+				email: '',
+				phone: '',
+				techStack: '',
+			}))
+			
+			// Reset settings form values
+			setSettingsValues({
+				fullName: '',
+				email: '',
+				phone: '',
+				techStack: '',
+			})
+			
+			// Clear form values for personal info fields
+			setFormValues((prev) => ({
+				...prev,
+				fullName: '',
+				email: '',
+				phone: '',
+				techStack: '',
+			}))
+			
+			// Clear signature if exists
+			localStorage.removeItem('lettercraft_signature')
+			setSignature(null)
+		}
+	}
+
+	// Group and filter variables based on defaults
+	const groupedVariables = useMemo(() => {
+		// Fields that have defaults configured (personal info only)
+		const defaultFields = ['fullName', 'email', 'phone', 'techStack']
+		
+		// Personal info fields (can be hidden if defaults exist)
+		const personalInfoFields = templateVariables.filter(v => 
+			['fullName', 'email', 'phone'].includes(v.id) && details[v.id as keyof typeof details]?.trim()
+		)
+		
+		// Application details - includes techStack (but techStack can be hidden if default exists)
+		const allApplicationFields = templateVariables.filter(v => 
+			['companyName', 'position', 'date', 'techStack'].includes(v.id)
+		)
+		
+		// Application fields to show (exclude techStack if it has a default)
+		const applicationFields = allApplicationFields.filter(v => {
+			if (v.id === 'techStack' && details.techStack?.trim()) {
+				return false // Hide techStack if default exists
+			}
+			return true
+		})
+		
+		// Template-specific fields (always show)
+		const templateSpecificFields = templateVariables.filter(v => 
+			!['fullName', 'email', 'phone', 'techStack'].includes(v.id) && 
+			!['companyName', 'position', 'date'].includes(v.id)
+		)
+		
+		// Fields to show (exclude personal info and techStack if defaults exist)
+		const fieldsToShow = [
+			...applicationFields,
+			...templateSpecificFields,
+			// Only include personal info fields if they don't have defaults
+			...templateVariables.filter(v => 
+				['fullName', 'email', 'phone'].includes(v.id) && !details[v.id as keyof typeof details]?.trim()
+			)
+		]
+		
+		return {
+			personalInfo: templateVariables.filter(v => ['fullName', 'email', 'phone'].includes(v.id)),
+			applicationDetails: allApplicationFields, // All application fields for grouping
+			templateSpecific: templateSpecificFields,
+			visible: fieldsToShow
+		}
+	}, [templateVariables, details])
+
+	// Calculate form completion percentage based on visible fields
+	const formCompletion = useMemo(() => {
+		const totalFields = groupedVariables.visible.length
+		const filledFields = groupedVariables.visible.filter((variable) => {
+			const value = formValues[variable.id] || ''
+			return value.trim().length > 0
+		}).length
+		return totalFields > 0 ? Math.round((filledFields / totalFields) * 100) : 0
+	}, [groupedVariables, formValues])
+
+	// Validate individual field
+	const validateField = (variable: typeof templateVariables[0], value: string): string | null => {
+		if (variable.fieldType === FieldType.MULTISELECT) {
+			const selectedValues = value ? value.split(', ').filter(Boolean) : []
+			if (variable.required && selectedValues.length === 0) {
+				return `${variable.label} is required`
+			}
+			return null
+		}
+		
+		if (variable.required && !value.trim()) {
+			return `${variable.label} is required`
+		}
+		
+		if (value.trim()) {
+			if (variable.fieldType === FieldType.EMAIL) {
+				const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+				if (!emailRegex.test(value.trim())) {
+					return 'Please enter a valid email address'
 				}
 			}
-		})
-		return missing
-	}, [templateVariables, formValues])
-
-	const isFormValid = missingRequiredFields.length === 0
+			
+			if (variable.fieldType === FieldType.PHONE) {
+				const phoneRegex = /^[\d\s\-\+\(\)]+$/
+				if (!phoneRegex.test(value.trim()) || value.trim().replace(/\D/g, '').length < 10) {
+					return 'Please enter a valid phone number'
+				}
+			}
+		}
+		
+		return null
+	}
 
 	const handleCopyToClipboard = async () => {
 		try {
@@ -252,6 +454,10 @@ export function CoverLetterPage() {
 
 	const renderInput = (variable: typeof templateVariables[0]) => {
 		const value = formValues[variable.id] || ''
+		const error = validateField(variable, value)
+		const hasError = error !== null
+		const isFilled = value.trim().length > 0
+		const isValid = !hasError && isFilled
 
 		switch (variable.fieldType) {
 			case FieldType.MULTISELECT:
@@ -393,140 +599,212 @@ export function CoverLetterPage() {
 				}
 				
 				return (
-					<div className="autocomplete-container">
-						{selectedValues.length > 0 && (
-							<div className="autocomplete-tags">
-								{selectedValues.map((val) => (
-									<span key={val} className="autocomplete-tag">
-										{val}
-										<button
-											type="button"
-											onClick={() => handleRemoveTech(val)}
-											className="autocomplete-tag-remove"
-											aria-label={`Remove ${val}`}
-										>
-											×
-										</button>
-									</span>
-								))}
-							</div>
-						)}
-						<div className="autocomplete-input-wrapper">
-							<input
-								type="text"
-								id={variable.id}
-								placeholder="Type to search technologies..."
-								value={searchTerm}
-								onChange={(e) => {
-									const newValue = e.target.value
-									setSearchTerms((prev) => ({
-										...prev,
-										[variable.id]: newValue,
-									}))
-									setShowSuggestions((prev) => ({
-										...prev,
-										[variable.id]: true,
-									}))
-									setHighlightedIndex((prev) => ({
-										...prev,
-										[variable.id]: -1,
-									}))
-								}}
-								onFocus={() => {
-									setShowSuggestions((prev) => ({
-										...prev,
-										[variable.id]: true,
-									}))
-								}}
-								onBlur={() => {
-									// Delay hiding suggestions to allow clicks
-									setTimeout(() => {
+					<div className="input-wrapper">
+						<div className={`autocomplete-container ${hasError ? 'input-error' : ''} ${isValid ? 'input-valid' : ''} ${isFilled ? 'input-filled' : ''}`}>
+							{selectedValues.length > 0 && (
+								<div className="autocomplete-tags">
+									{selectedValues.map((val) => (
+										<span key={val} className="autocomplete-tag">
+											{val}
+											<button
+												type="button"
+												onClick={() => handleRemoveTech(val)}
+												className="autocomplete-tag-remove"
+												aria-label={`Remove ${val}`}
+											>
+												×
+											</button>
+										</span>
+									))}
+								</div>
+							)}
+							<div className="autocomplete-input-wrapper">
+								<input
+									type="text"
+									id={variable.id}
+									placeholder="Type to search technologies..."
+									value={searchTerm}
+									onChange={(e) => {
+										const newValue = e.target.value
+										setSearchTerms((prev) => ({
+											...prev,
+											[variable.id]: newValue,
+										}))
 										setShowSuggestions((prev) => ({
 											...prev,
-											[variable.id]: false,
+											[variable.id]: true,
 										}))
-									}, 200)
-								}}
-								onKeyDown={handleKeyDown}
-								className="autocomplete-input"
-							/>
-							{isSuggestionsVisible && displayOptions.length > 0 && (
-								<ul className="autocomplete-suggestions">
-									{displayOptions.map((option, index) => {
-										const isCustomOption = option.startsWith('+ Add "')
-										return (
-											<li
-												key={option}
-												className={`autocomplete-suggestion ${
-													index === currentHighlightedIndex ? 'highlighted' : ''
-												} ${isCustomOption ? 'custom-option' : ''}`}
-												onMouseDown={(e) => {
-													e.preventDefault()
-													handleAddTech(option)
-												}}
-												onMouseEnter={() => {
-													setHighlightedIndex((prev) => ({
-														...prev,
-														[variable.id]: index,
-													}))
-												}}
-											>
-												{isCustomOption && <span className="custom-icon">✨</span>}
-												{option}
-											</li>
-										)
-									})}
-								</ul>
-							)}
+										setHighlightedIndex((prev) => ({
+											...prev,
+											[variable.id]: -1,
+										}))
+									}}
+									onFocus={() => {
+										setShowSuggestions((prev) => ({
+											...prev,
+											[variable.id]: true,
+										}))
+									}}
+									onBlur={() => {
+										// Delay hiding suggestions to allow clicks
+										setTimeout(() => {
+											setShowSuggestions((prev) => ({
+												...prev,
+												[variable.id]: false,
+											}))
+										}, 200)
+									}}
+									onKeyDown={handleKeyDown}
+									className={`autocomplete-input ${hasError ? 'input-error' : ''}`}
+									aria-invalid={hasError}
+									aria-describedby={hasError ? `${variable.id}-error` : undefined}
+								/>
+								{isSuggestionsVisible && displayOptions.length > 0 && (
+									<ul className="autocomplete-suggestions">
+										{displayOptions.map((option, index) => {
+											const isCustomOption = option.startsWith('+ Add "')
+											return (
+												<li
+													key={option}
+													className={`autocomplete-suggestion ${
+														index === currentHighlightedIndex ? 'highlighted' : ''
+													} ${isCustomOption ? 'custom-option' : ''}`}
+													onMouseDown={(e) => {
+														e.preventDefault()
+														handleAddTech(option)
+													}}
+													onMouseEnter={() => {
+														setHighlightedIndex((prev) => ({
+															...prev,
+															[variable.id]: index,
+														}))
+													}}
+												>
+													{isCustomOption && <span className="custom-icon">✨</span>}
+													{option}
+												</li>
+											)
+										})}
+									</ul>
+								)}
+								{isValid && (
+									<div className="field-success">
+										<span className="success-icon">✓</span>
+									</div>
+								)}
+							</div>
 						</div>
+						{hasError && (
+							<div id={`${variable.id}-error`} className="field-error" role="alert">
+								<span className="error-icon">⚠️</span>
+								<span>{error}</span>
+							</div>
+						)}
 					</div>
 				)
 			case FieldType.TEXTAREA:
 				return (
-					<textarea
-						id={variable.id}
-						value={value}
-						onChange={(e) => handleInputChange(variable.id, e.target.value)}
-						placeholder={variable.placeholder}
-						required={variable.required}
-						rows={4}
-						className="form-textarea"
-					/>
+					<div className="input-wrapper">
+						<textarea
+							id={variable.id}
+							value={value}
+							onChange={(e) => handleInputChange(variable.id, e.target.value)}
+							placeholder={variable.placeholder}
+							required={variable.required}
+							rows={4}
+							className={`form-textarea ${hasError ? 'input-error' : ''} ${isValid ? 'input-valid' : ''} ${isFilled ? 'input-filled' : ''}`}
+							aria-invalid={hasError}
+							aria-describedby={hasError ? `${variable.id}-error` : undefined}
+						/>
+						{hasError && (
+							<div id={`${variable.id}-error`} className="field-error" role="alert">
+								<span className="error-icon">⚠️</span>
+								<span>{error}</span>
+							</div>
+						)}
+						{isValid && variable.fieldType === FieldType.TEXTAREA && (
+							<div className="field-hint">
+								<span className="char-count">{value.length} characters</span>
+							</div>
+						)}
+					</div>
 				)
 			case FieldType.EMAIL:
 				return (
-					<input
-						type="email"
-						id={variable.id}
-						value={value}
-						onChange={(e) => handleInputChange(variable.id, e.target.value)}
-						placeholder={variable.placeholder}
-						required={variable.required}
-						className="form-input"
-					/>
+					<div className="input-wrapper">
+						<input
+							type="email"
+							id={variable.id}
+							value={value}
+							onChange={(e) => handleInputChange(variable.id, e.target.value)}
+							placeholder={variable.placeholder}
+							required={variable.required}
+							autoComplete="email"
+							className={`form-input ${hasError ? 'input-error' : ''} ${isValid ? 'input-valid' : ''} ${isFilled ? 'input-filled' : ''}`}
+							aria-invalid={hasError}
+							aria-describedby={hasError ? `${variable.id}-error` : undefined}
+						/>
+						{hasError && (
+							<div id={`${variable.id}-error`} className="field-error" role="alert">
+								<span className="error-icon">⚠️</span>
+								<span>{error}</span>
+							</div>
+						)}
+						{isValid && (
+							<div className="field-success">
+								<span className="success-icon">✓</span>
+							</div>
+						)}
+					</div>
 				)
 			case FieldType.PHONE:
 				return (
-					<input
-						type="tel"
-						id={variable.id}
-						value={value}
-						onChange={(e) => handleInputChange(variable.id, e.target.value)}
-						placeholder={variable.placeholder}
-						required={variable.required}
-						className="form-input"
-					/>
+					<div className="input-wrapper">
+						<input
+							type="tel"
+							id={variable.id}
+							value={value}
+							onChange={(e) => handleInputChange(variable.id, e.target.value)}
+							placeholder={variable.placeholder}
+							required={variable.required}
+							autoComplete="tel"
+							className={`form-input ${hasError ? 'input-error' : ''} ${isValid ? 'input-valid' : ''} ${isFilled ? 'input-filled' : ''}`}
+							aria-invalid={hasError}
+							aria-describedby={hasError ? `${variable.id}-error` : undefined}
+						/>
+						{hasError && (
+							<div id={`${variable.id}-error`} className="field-error" role="alert">
+								<span className="error-icon">⚠️</span>
+								<span>{error}</span>
+							</div>
+						)}
+						{isValid && (
+							<div className="field-success">
+								<span className="success-icon">✓</span>
+							</div>
+						)}
+					</div>
 				)
 			case FieldType.DATE:
 				return (
-					<input
-						type="date"
-						id={variable.id}
-						value={value}
-						onChange={(e) => handleInputChange(variable.id, e.target.value)}
-						required={variable.required}
-						className="form-input"
-					/>
+					<div className="input-wrapper">
+						<input
+							type="date"
+							id={variable.id}
+							value={value}
+							onChange={(e) => handleInputChange(variable.id, e.target.value)}
+							required={variable.required}
+							className={`form-input ${hasError ? 'input-error' : ''} ${isValid ? 'input-valid' : ''} ${isFilled ? 'input-filled' : ''}`}
+							aria-invalid={hasError}
+							aria-describedby={hasError ? `${variable.id}-error` : undefined}
+						/>
+						{hasError && (
+							<div id={`${variable.id}-error`} className="field-error" role="alert">
+								<span className="error-icon">⚠️</span>
+								<span>{error}</span>
+							</div>
+						)}
+					</div>
 				)
 			case FieldType.NUMBER:
 				return (
@@ -542,15 +820,31 @@ export function CoverLetterPage() {
 				)
 			default:
 				return (
-					<input
-						type="text"
-						id={variable.id}
-						value={value}
-						onChange={(e) => handleInputChange(variable.id, e.target.value)}
-						placeholder={variable.placeholder}
-						required={variable.required}
-						className="form-input"
-					/>
+					<div className="input-wrapper">
+						<input
+							type="text"
+							id={variable.id}
+							value={value}
+							onChange={(e) => handleInputChange(variable.id, e.target.value)}
+							placeholder={variable.placeholder}
+							required={variable.required}
+							autoComplete={variable.id === 'fullName' ? 'name' : variable.id === 'companyName' ? 'organization' : 'off'}
+							className={`form-input ${hasError ? 'input-error' : ''} ${isValid ? 'input-valid' : ''} ${isFilled ? 'input-filled' : ''}`}
+							aria-invalid={hasError}
+							aria-describedby={hasError ? `${variable.id}-error` : undefined}
+						/>
+						{hasError && (
+							<div id={`${variable.id}-error`} className="field-error" role="alert">
+								<span className="error-icon">⚠️</span>
+								<span>{error}</span>
+							</div>
+						)}
+						{isValid && (
+							<div className="field-success">
+								<span className="success-icon">✓</span>
+							</div>
+						)}
+					</div>
 				)
 		}
 	}
@@ -574,16 +868,6 @@ export function CoverLetterPage() {
 						<span>⚙️</span>
 						<span>Settings</span>
 					</button>
-					<div className="export-buttons">
-						<button onClick={handleExportText} className="btn btn-secondary">
-							<span>📄</span>
-							<span>Export as Text</span>
-						</button>
-						<button onClick={handleExportPDF} className="btn btn-primary">
-							<span>📥</span>
-							<span>Export as PDF</span>
-						</button>
-					</div>
 				</div>
 			</header>
 
@@ -591,7 +875,7 @@ export function CoverLetterPage() {
 				<div className="settings-panel">
 					<h3>Default Information</h3>
 					<p className="settings-description">
-						Configure your default name, email, phone, and e-signature. These will be used to pre-fill forms and add to your cover letters.
+						Configure your default name, email, phone, tech stack, and e-signature. These will be used to pre-fill forms and add to your cover letters.
 					</p>
 					<div className="settings-form">
 						<div className="form-group">
@@ -649,18 +933,49 @@ export function CoverLetterPage() {
 							/>
 						</div>
 						<div className="form-group">
+							<label htmlFor="settings-techStack" className="form-label">
+								Tech Stack (comma-separated)
+							</label>
+							<textarea
+								id="settings-techStack"
+								value={settingsValues.techStack}
+								onChange={(e) =>
+									setSettingsValues((prev) => ({
+										...prev,
+										techStack: e.target.value,
+									}))
+								}
+								className="form-textarea"
+								placeholder="e.g., React, TypeScript, Node.js"
+								rows={3}
+							/>
+							<p className="field-hint" style={{ marginTop: '0.25rem', fontSize: '0.75rem', color: '#9d9588' }}>
+								Enter your commonly used technologies separated by commas. This will be pre-filled in forms.
+							</p>
+						</div>
+						<div className="form-group">
 							<SignaturePad
 								onSignatureChange={handleSignatureChange}
 								initialSignature={signature}
 							/>
 						</div>
 						<div className="settings-actions">
-							<button onClick={handleCancelSettings} className="btn btn-secondary">
-								Cancel
+							<button 
+								onClick={handleResetSettings} 
+								className="btn btn-reset"
+								type="button"
+							>
+								<span>🗑️</span>
+								<span>Reset All</span>
 							</button>
-							<button onClick={handleSaveSettings} className="btn btn-primary">
-								Save Defaults
-							</button>
+							<div className="settings-actions-right">
+								<button onClick={handleCancelSettings} className="btn btn-secondary">
+									Cancel
+								</button>
+								<button onClick={handleSaveSettings} className="btn btn-primary">
+									Save Defaults
+								</button>
+							</div>
 						</div>
 					</div>
 				</div>
@@ -696,20 +1011,85 @@ export function CoverLetterPage() {
 
 			<div className="cover-letter-container">
 				<div className="form-section">
-					<h2>
-						<span>✍️</span>
-						<span>Fill in the Details</span>
-					</h2>
-					<form className="cover-letter-form">
-						{templateVariables.map((variable) => (
-							<div key={variable.id} className="form-group">
-								<label htmlFor={variable.id} className="form-label">
-									{variable.label}
-									{variable.required && <span className="required">*</span>}
-								</label>
-								{renderInput(variable)}
+					<div className="form-header">
+						<h2>
+							<span>✍️</span>
+							<span>Fill in the Details</span>
+						</h2>
+						<div className="form-progress">
+							<div className="progress-bar">
+								<div 
+									className="progress-fill" 
+									style={{ width: `${formCompletion}%` }}
+									role="progressbar"
+									aria-valuenow={formCompletion}
+									aria-valuemin={0}
+									aria-valuemax={100}
+								></div>
 							</div>
-						))}
+							<span className="progress-text">{formCompletion}% complete</span>
+						</div>
+					</div>
+					<form className="cover-letter-form">
+						{/* Application Details Section */}
+						{groupedVariables.applicationDetails.filter(v => 
+							// Show techStack if no default, or if it's in visible fields
+							v.id !== 'techStack' || !details.techStack?.trim() || groupedVariables.visible.includes(v)
+						).length > 0 && (
+							<div className="form-field-group">
+								<h3 className="field-group-title">Application Details</h3>
+								{groupedVariables.applicationDetails
+									.filter(v => groupedVariables.visible.includes(v))
+									.map((variable) => (
+										<div key={variable.id} className="form-group">
+											<label htmlFor={variable.id} className="form-label">
+												{variable.label}
+												{variable.required && <span className="required">*</span>}
+											</label>
+											{renderInput(variable)}
+										</div>
+									))}
+							</div>
+						)}
+						
+						{/* Template-Specific Fields Section */}
+						{groupedVariables.templateSpecific.length > 0 && (
+							<div className="form-field-group">
+								<h3 className="field-group-title">Additional Information</h3>
+								{groupedVariables.templateSpecific.map((variable) => (
+									<div key={variable.id} className="form-group">
+										<label htmlFor={variable.id} className="form-label">
+											{variable.label}
+											{variable.required && <span className="required">*</span>}
+										</label>
+										{renderInput(variable)}
+									</div>
+								))}
+							</div>
+						)}
+						
+						{/* Personal Info Fields (only show if no defaults) */}
+						{groupedVariables.personalInfo.filter(v => 
+							!details[v.id as keyof typeof details]?.trim()
+						).length > 0 && (
+							<div className="form-field-group">
+								<h3 className="field-group-title">Personal Information</h3>
+								<p className="field-group-hint">
+									Configure these in Settings to auto-fill for future applications.
+								</p>
+								{groupedVariables.personalInfo
+									.filter(v => !details[v.id as keyof typeof details]?.trim())
+									.map((variable) => (
+										<div key={variable.id} className="form-group">
+											<label htmlFor={variable.id} className="form-label">
+												{variable.label}
+												{variable.required && <span className="required">*</span>}
+											</label>
+											{renderInput(variable)}
+										</div>
+									))}
+							</div>
+						)}
 					</form>
 				</div>
 
@@ -719,15 +1099,84 @@ export function CoverLetterPage() {
 							<span>👁️</span>
 							<span>Preview</span>
 						</h2>
-						<button
-							onClick={handleCopyToClipboard}
-							disabled={!isFormValid}
-							className="btn btn-copy"
-							title={isFormValid ? 'Copy to clipboard' : 'Fill in all required fields first'}
-						>
-							<span>📋</span>
-							<span>Copy to Clipboard</span>
-						</button>
+						<div className="preview-actions">
+							<button
+								onClick={handleCopyToClipboard}
+								disabled={!isFormValid}
+								className="btn btn-copy"
+								title={isFormValid ? 'Copy to clipboard' : 'Fill in all required fields first'}
+							>
+								<span>📋</span>
+								<span>Copy to Clipboard</span>
+							</button>
+							<div className="export-dropdown" ref={exportDropdownRef} data-open={showExportDropdown}>
+								<button
+									onClick={handleExportPDF}
+									disabled={!isFormValid}
+									className="btn btn-primary btn-export-main"
+									title={isFormValid ? 'Export as PDF' : 'Fill in all required fields first'}
+								>
+									<span>📥</span>
+									<span>Export</span>
+								</button>
+								<button
+									onClick={(e) => {
+										e.stopPropagation()
+										if (isFormValid) {
+											setShowExportDropdown(!showExportDropdown)
+										}
+									}}
+									onMouseDown={(e) => e.stopPropagation()}
+									disabled={!isFormValid}
+									className="btn btn-primary btn-export-toggle"
+									aria-label="Toggle export options"
+									title={isFormValid ? 'More export options' : 'Fill in all required fields first'}
+									aria-expanded={showExportDropdown}
+								>
+									<span>▼</span>
+								</button>
+								{showExportDropdown && (
+									<div 
+										className="export-dropdown-menu"
+										onMouseDown={(e) => e.stopPropagation()}
+									>
+										<button
+											onClick={(e) => {
+												e.stopPropagation()
+												handleExportPDF()
+											}}
+											disabled={!isFormValid}
+											className="export-dropdown-item"
+										>
+											<span>📥</span>
+											<span>Export as PDF</span>
+										</button>
+										<button
+											onClick={(e) => {
+												e.stopPropagation()
+												handleExportText()
+											}}
+											disabled={!isFormValid}
+											className="export-dropdown-item"
+										>
+											<span>📄</span>
+											<span>Export as Text</span>
+										</button>
+										<button
+											onClick={(e) => {
+												e.stopPropagation()
+												handleExportMarkdownPDF()
+											}}
+											disabled={!isFormValid}
+											className="export-dropdown-item"
+										>
+											<span>📝</span>
+											<span>Export as Markdown PDF</span>
+										</button>
+									</div>
+								)}
+							</div>
+						</div>
 					</div>
 					<div className="preview-content">
 						<pre className="preview-text">{processedContent}</pre>
