@@ -243,28 +243,103 @@ export function generatePDF(
 		
 		// Add e-signature image if available
 		if (options.signature && typeof options.signature === 'string' && options.signature.trim()) {
+			const signatureData = options.signature // Capture for TypeScript
 			try {
-				// Use wider signature dimensions for better visibility
-				// Signature pad is 120px height, typically wider (around 3:1 or 4:1 aspect ratio)
-				// For PDF: 1 inch = 25.4mm, making it wider for better appearance
-				const signatureWidth = 80 // mm (about 3.1 inches - wider signature width)
-				const signatureHeight = 20 // mm (about 0.8 inches - proportional height)
+				// Load image to get actual dimensions for autofit
+				const img = new Image()
+				img.src = signatureData
 				
-				// Add signature image with pleasant, readable dimensions
+				// Max dimensions for signature in PDF
+				const maxWidth = 100 // mm (about 4 inches - wide enough for signatures)
+				const maxHeight = 30 // mm (about 1.2 inches - reasonable height)
+				
+				// If image is already loaded, calculate and add immediately
+				if (img.complete && img.naturalWidth > 0 && img.naturalHeight > 0) {
+					const aspectRatio = img.naturalHeight / img.naturalWidth
+					let signatureWidth = maxWidth
+					let signatureHeight = signatureWidth * aspectRatio
+					
+					// If height exceeds max, scale down
+					if (signatureHeight > maxHeight) {
+						signatureHeight = maxHeight
+						signatureWidth = signatureHeight / aspectRatio
+					}
+					
+					// Ensure minimum readable size
+					if (signatureWidth < 50) {
+						signatureWidth = 50
+						signatureHeight = signatureWidth * aspectRatio
+					}
+					
+					doc.addImage(
+						signatureData,
+						'PNG',
+						leftMargin,
+						y,
+						signatureWidth,
+						signatureHeight
+					)
+					y += signatureHeight + lineHeight * 1.5
+				} else {
+					// Wait for image to load, then calculate dimensions
+					img.onload = () => {
+						const aspectRatio = img.naturalHeight / img.naturalWidth
+						let finalWidth = maxWidth
+						let finalHeight = finalWidth * aspectRatio
+						
+						if (finalHeight > maxHeight) {
+							finalHeight = maxHeight
+							finalWidth = finalHeight / aspectRatio
+						}
+						
+						if (finalWidth < 50) {
+							finalWidth = 50
+							finalHeight = finalWidth * aspectRatio
+						}
+						
+						doc.addImage(
+							signatureData,
+							'PNG',
+							leftMargin,
+							y,
+							finalWidth,
+							finalHeight
+						)
+					}
+					
+					// Use estimated dimensions (fallback if onload doesn't fire in time)
+					// Estimate based on signature pad dimensions (200px height, ~4:1 aspect ratio)
+					const estimatedAspectRatio = 200 / 800 // height/width estimate
+					let estimatedWidth = maxWidth
+					let estimatedHeight = estimatedWidth * estimatedAspectRatio
+					
+					if (estimatedHeight > maxHeight) {
+						estimatedHeight = maxHeight
+						estimatedWidth = estimatedHeight / estimatedAspectRatio
+					}
+					
+					doc.addImage(
+						signatureData,
+						'PNG',
+						leftMargin,
+						y,
+						estimatedWidth,
+						estimatedHeight
+					)
+					y += estimatedHeight + lineHeight * 1.5
+				}
+			} catch (error) {
+				console.error('Error adding signature to PDF:', error)
+				// Fallback: use fixed dimensions
 				doc.addImage(
-					options.signature,
+					signatureData,
 					'PNG',
 					leftMargin,
 					y,
-					signatureWidth,
-					signatureHeight
+					80,
+					20
 				)
-				
-				y += signatureHeight + lineHeight * 1.5
-			} catch (error) {
-				console.error('Error adding signature to PDF:', error)
-				// Fallback: just add spacing
-				y += lineHeight * 2
+				y += 20 + lineHeight * 1.5
 			}
 		} else {
 			// No signature, add space for handwritten signature

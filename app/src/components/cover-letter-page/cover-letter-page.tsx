@@ -595,12 +595,6 @@ export function CoverLetterPage() {
 					</p>
 					<div className="settings-form">
 						<div className="form-group">
-							<SignaturePad
-								onSignatureChange={handleSignatureChange}
-								initialSignature={signature}
-							/>
-						</div>
-						<div className="form-group">
 							<label htmlFor="settings-fullName" className="form-label">
 								Full Name
 							</label>
@@ -652,6 +646,12 @@ export function CoverLetterPage() {
 								}
 								className="form-input"
 								placeholder="Enter your phone number"
+							/>
+						</div>
+						<div className="form-group">
+							<SignaturePad
+								onSignatureChange={handleSignatureChange}
+								initialSignature={signature}
 							/>
 						</div>
 						<div className="settings-actions">
